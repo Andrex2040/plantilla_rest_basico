@@ -1,18 +1,35 @@
-const { response } = require('express');
+const { response, request } = require("express");
+const encripta = require("bcryptjs");
+const Usuario = require("../models/usuario");
 
-const usuariosGet =  (req, res) => {
+const usuariosGet = async(req, res) => {
+  // const { nombre, edad } = req.query;
+  const { limite = 5, desde = 0 } = req.query;
+  const query = { estado: true };
 
-    const { nombre, edad } = req.query;
-    res.json({
-        msg: "get api",
-        nombre,
-        edad
-    });
-}
+  // Manera de llamar dos await lo cual puede llevar mucho tiempo
+  // const usuarios = await Usuario.find( query )
+  //                 .skip( Number(desde) )
+  //                 .limit( Number(limite) );
 
-const usuariosPost =  (req, res) => {
-    
-    /*const body = req.body;
+  // const total = await Usuario.countDocuments( query );
+
+  // Manera de disparar varios await en simultaneo
+  const [ total, usuarios ] = await Promise.all([
+    Usuario.countDocuments( query ),
+    Usuario.find( query )
+      .skip( Number(desde) )
+      .limit( Number(limite) )
+  ])
+
+  res.json({
+    total,
+    usuarios
+  });
+};
+
+const usuariosPost = async (req = request, res = response) => {
+  /*const body = req.body;
 
     res.status(201).json({
         id: 1,
@@ -21,41 +38,58 @@ const usuariosPost =  (req, res) => {
         metodo: 'post'
     })*/
 
-    // Modo de desestructurado
-    const { nombre, edad } = req.body;
+  // Modo de desestructurado
+  const { nombre, correo, contrasena, rol } = req.body;
+  //const body= req.body;
+  const usuario = new Usuario({ nombre, correo, contrasena, rol });
 
-    res.status(201).json({
-        id: 1,
-        nombre,
-        edad,
-        metodo: 'post'
-    })
-}
+  // Encriptar la contraseña
+  const salt = encripta.genSaltSync();
+  usuario.contrasena = encripta.hashSync(contrasena, salt);
 
-const usuariosPut =  (req, res) => {
+  await usuario.save();
 
-    const id = req.params.id;
+  res.json({
+    usuario,
+    metodo: "post",
+  });
+};
 
-    res.json({
-        id: id,
-        nombre: 'Andres',
-        apellido: 'Rivera',
-        metodo: 'put'
-    })
-}
+const usuariosPut = async (req, res = response) => {
+  const id = req.params.id;
+  const { _id, contrasena, google, correo, ...resto } = req.body;
 
-const usuariosDelete =  (req, res) => {
-    res.json({
-        id: 1,
-        nombre: 'Andres',
-        apellido: 'Rivera',
-        metodo: 'delete'
-    })
-}
+  // Validar contra base de datos
+  if (contrasena) {
+    //Encriptar la contraseña
+    const salt = encripta.genSaltSync();
+    resto.contrasena = encripta.hashSync(contrasena, salt);
+  }
+
+  const usuario = await Usuario.findByIdAndUpdate(id, resto);
+
+  res.json({
+    usuario,
+    metodo: "put",
+  });
+};
+
+const usuariosDelete = async(req, res = response) => {
+
+  const { id } = req.params;
+
+  // Borrar 
+  // const usuario = await Usuario.findByIdAndDelete( id );
+  const usuario = await Usuario.findByIdAndUpdate( id, { estado:false } )
+
+  res.json({
+    usuario
+  });
+};
 
 module.exports = {
-    usuariosGet,
-    usuariosPost,
-    usuariosPut,
-    usuariosDelete
-}
+  usuariosGet,
+  usuariosPost,
+  usuariosPut,
+  usuariosDelete,
+};
